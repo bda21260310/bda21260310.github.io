@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Space Dodge - 우주선 운석 피하기</title>
+<style>
+  :root{
+    --mint:#4dffc3;
+    --mint-glow:#a6ffe0;
+    --bg-deep:#05060d;
+    --panel-bg:rgba(8,12,24,0.82);
+    --panel-border:rgba(77,255,195,0.35);
+    --gold:#ffd23f;
+    --danger:#ff4d6d;
+    --text-dim:#7c8aa5;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--bg-deep);
+    overflow:hidden;
+    font-family:'Courier New', 'D2Coding', monospace;
+    color:#e8ecf7;
+    touch-action:none;
+    user-select:none;
+  }
+  #gameWrap{
+    position:relative;
+    width:100vw; height:100vh;
+    overflow:hidden;
+  }
+  canvas{
+    display:block;
+    width:100%; height:100%;
+    cursor:none;
+  }
+
+  /* ---------- HUD ---------- */
+  #hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:16px 20px;
+    pointer-events:none;
+    z-index:5;
+    font-variant-numeric: tabular-nums;
+  }
+  .hud-box{
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:8px 14px;
+    font-size:14px;
+    letter-spacing:1px;
+    box-shadow:0 0 18px rgba(77,255,195,0.08);
+  }
+  .hud-label{ color:var(--text-dim); font-size:10px; letter-spacing:2px; margin-bottom:2px;}
+  .hud-value{ font-size:20px; font-weight:bold; color:var(--mint); text-shadow:0 0 10px rgba(77,255,195,0.6);}
+  .hud-value.gold{ color:var(--gold); text-shadow:0 0 10px rgba(255,210,63,0.6);}
+
+  /* ---------- Overlays ---------- */
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, rgba(15,20,40,0.55), rgba(2,3,8,0.92));
+    z-index:20;
+    backdrop-filter: blur(2px);
+  }
+  .overlay.hidden{ display:none; }
+  .panel{
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:18px;
+    padding:36px 40px;
+    width:min(420px, 88vw);
+    text-align:center;
+    box-shadow:0 0 60px rgba(77,255,195,0.12), inset 0 0 40px rgba(77,255,195,0.03);
+  }
+  h1.title{
+    font-size:26px;
+    letter-spacing:4px;
+    margin:0 0 6px;
+    color:var(--mint);
+    text-shadow:0 0 16px rgba(77,255,195,0.7), 0 0 40px rgba(77,255,195,0.3);
+  }
+  .subtitle{
+    font-size:11px;
+    letter-spacing:3px;
+    color:var(--text-dim);
+    margin-bottom:26px;
+  }
+  .ship-preview{
+    margin:0 auto 24px;
+    width:60px; height:60px;
+  }
+  .btn{
+    display:inline-block;
+    width:100%;
+    padding:14px 0;
+    margin-top:6px;
+    background:linear-gradient(180deg, rgba(77,255,195,0.18), rgba(77,255,195,0.06));
+    border:1px solid var(--mint);
+    color:var(--mint);
+    font-family:inherit;
+    font-size:15px;
+    letter-spacing:3px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
+    text-shadow:0 0 10px rgba(77,255,195,0.6);
+  }
+  .btn:hover, .btn:active{
+    background:linear-gradient(180deg, rgba(77,255,195,0.32), rgba(77,255,195,0.1));
+    box-shadow:0 0 24px rgba(77,255,195,0.35);
+    transform:translateY(-1px);
+  }
+  .btn.secondary{
+    border-color:rgba(124,138,165,0.5);
+    color:#c4cede;
+    background:rgba(124,138,165,0.08);
+    text-shadow:none;
+    font-size:12px;
+    letter-spacing:2px;
+    padding:10px 0;
+  }
+  .btn.secondary:hover{
+    box-shadow:none;
+    background:rgba(124,138,165,0.16);
+  }
+
+  .option-row{
+    text-align:left;
+    margin:18px 0;
+  }
+  .option-row label{
+    display:flex;
+    justify-content:space-between;
+    font-size:11px;
+    letter-spacing:1.5px;
+    color:var(--text-dim);
+    margin-bottom:8px;
+  }
+  .option-row .valnow{ color:var(--mint); font-weight:bold; }
+  input[type="range"]{
+    -webkit-appearance:none;
+    width:100%;
+    height:4px;
+    border-radius:4px;
+    background:rgba(124,138,165,0.25);
+    outline:none;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:16px; height:16px;
+    border-radius:50%;
+    background:var(--mint);
+    box-shadow:0 0 10px rgba(77,255,195,0.8);
+    cursor:pointer;
+    border:none;
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:16px; height:16px;
+    border-radius:50%;
+    background:var(--mint);
+    box-shadow:0 0 10px rgba(77,255,195,0.8);
+    cursor:pointer;
+    border:none;
+  }
+
+  .stat-grid{
+    display:flex;
+    gap:12px;
+    margin:22px 0 10px;
+  }
+  .stat-cell{
+    flex:1;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:10px;
+    padding:14px 6px;
+  }
+  .stat-cell .lbl{ font-size:10px; letter-spacing:2px; color:var(--text-dim); margin-bottom:6px;}
+  .stat-cell .num{ font-size:22px; font-weight:bold; color:#fff; }
+  .stat-cell.best .num{ color:var(--gold); }
+
+  .go-title{
+    font-size:20px;
+    letter-spacing:3px;
+    color:var(--danger);
+    text-shadow:0 0 16px rgba(255,77,109,0.6);
+    margin:0 0 4px;
+  }
+
+  #startHint{
+    position:absolute;
+    bottom:22px; left:0; right:0;
+    text-align:center;
+    font-size:11px;
+    letter-spacing:2px;
+    color:var(--text-dim);
+    z-index:6;
+    pointer-events:none;
+    opacity:0.8;
+  }
+
+  @media (max-width:480px){
+    .panel{ padding:28px 22px; }
+    h1.title{ font-size:22px; }
+  }
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" style="display:none;">
+    <div class="hud-box">
+      <div class="hud-label">SCORE</div>
+      <div class="hud-value" id="scoreVal">0</div>
+    </div>
+    <div class="hud-box" style="text-align:right;">
+      <div class="hud-label">TIME</div>
+      <div class="hud-value gold" id="timeVal">0.0s</div>
+    </div>
+  </div>
+
+  <div id="startHint" style="display:none;">마우스 또는 손가락으로 우주선을 조종하세요</div>
+
+  <!-- Start overlay -->
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <svg class="ship-preview" viewBox="0 0 60 60"><g id="shipPreviewSvg"></g></svg>
+      <h1 class="title">SPACE DODGE</h1>
+      <div class="subtitle">운석을 피하고 별을 모아라</div>
+
+      <div class="option-row">
+        <label>우주선 속도 (민감도) <span class="valnow" id="speedLabel">1.0x</span></label>
+        <input type="range" id="speedSlider" min="0.5" max="2" step="0.1" value="1.0">
+      </div>
+
+      <button class="btn" id="startBtn">게임 시작</button>
+
+      <div class="stat-grid">
+        <div class="stat-cell best">
+          <div class="lbl">BEST SCORE</div>
+          <div class="num" id="bestScoreDisplay">0</div>
+        </div>
+        <div class="stat-cell best">
+          <div class="lbl">BEST TIME</div>
+          <div class="num" id="bestTimeDisplay">0.0s</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game over overlay -->
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="panel">
+      <div class="go-title">GAME OVER</div>
+      <div class="subtitle">운석과 충돌했습니다</div>
+
+      <div class="stat-grid">
+        <div class="stat-cell">
+          <div class="lbl">SCORE</div>
+          <div class="num" id="finalScore">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="lbl">SURVIVED</div>
+          <div class="num" id="finalTime">0.0s</div>
+        </div>
+      </div>
+      <div class="stat-grid" id="newRecordRow" style="display:none;">
+        <div class="stat-cell best" style="flex:1;">
+          <div class="lbl">🏆 NEW RECORD 🏆</div>
+        </div>
+      </div>
+
+      <button class="btn" id="retryBtn">다시 시작</button>
+      <button class="btn secondary" id="menuBtn">메인 메뉴로</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------
+  // Setup
+  // ---------------------------------------------------------
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const gameWrap = document.getElementById('gameWrap');
+
+  let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+  function resize(){
+    W = gameWrap.clientWidth;
+    H = gameWrap.clientHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------
+  // State
+  // ---------------------------------------------------------
+  const STORAGE_KEY_SCORE = 'spaceDodge_bestScore';
+  const STORAGE_KEY_TIME = 'spaceDodge_bestTime';
+
+  let bestScore = 0, bestTime = 0;
+  try{
+    bestScore = parseInt(localStorage.getItem(STORAGE_KEY_SCORE) || '0', 10) || 0;
+    bestTime = parseFloat(localStorage.getItem(STORAGE_KEY_TIME) || '0') || 0;
+  }catch(e){ /* localStorage unavailable — ignore */ }
+
+  let state = 'menu'; // 'menu' | 'playing' | 'gameover'
+  let sensitivity = 1.0;
+
+  let score = 0;
+  let elapsed = 0;       // seconds survived
+  let lastTs = null;
+
+  let shipX = 0, shipY = 0;   // current ship position
+  let targetX = 0, targetY = 0; // pointer target
+  let shipVX = 0, shipVY = 0; // velocity for smoothing/trail
+
+  const SHIP_RADIUS = 16;
+  let pointerActive = false;
+
+  let meteors = [];
+  let stars = []; // score items (falling)
+  let bgStars = []; // background dots
+  let particles = []; // explosion / trail particles
+
+  let spawnTimer = 0;
+  let spawnInterval = 0.9; // seconds between meteor spawns, decreases over time
+  let starTimer = 0;
+  let starInterval = 2.6;
+
+  let difficultySpeedMul = 1;
+
+  let shakeTime = 0;
+  let shakeMag = 0;
+
+  // ---------------------------------------------------------
+  // Background starfield (parallax)
+  // ---------------------------------------------------------
+  function initBgStars(){
+    bgStars = [];
+    const count = Math.floor((W*H) / 6000);
+    for(let i=0;i<count;i++){
+      bgStars.push({
+        x: Math.random()*W,
+        y: Math.random()*H,
+        r: Math.random()*1.4 + 0.3,
+        speed: Math.random()*40 + 15,
+        alpha: Math.random()*0.5 + 0.3,
+        twinkleSpeed: Math.random()*2 + 0.5,
+        twinklePhase: Math.random()*Math.PI*2
+      });
+    }
+  }
+  initBgStars();
+  window.addEventListener('resize', initBgStars);
+
+  // streak stars (speed lines) - occasional
+  let streaks = [];
+  function maybeSpawnStreak(dt){
+    if(state !== 'playing') return;
+    if(Math.random() < dt * 1.2){
+      streaks.push({
+        x: Math.random()*W,
+        y: -10,
+        len: Math.random()*60 + 40,
+        speed: Math.random()*500 + 400,
+        alpha: Math.random()*0.4 + 0.2
+      });
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Input handling
+  // ---------------------------------------------------------
+  function setTargetFromClient(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    targetX = clientX - rect.left;
+    targetY = clientY - rect.top;
+    pointerActive = true;
+  }
+
+  canvas.addEventListener('mousemove', (e)=>{
+    setTargetFromClient(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('touchmove', (e)=>{
+    if(e.touches && e.touches.length>0){
+      setTargetFromClient(e.touches[0].clientX, e.touches[0].clientY);
+    }
+    e.preventDefault();
+  }, {passive:false});
+  canvas.addEventListener('touchstart', (e)=>{
+    if(e.touches && e.touches.length>0){
+      setTargetFromClient(e.touches[0].clientX, e.touches[0].clientY);
+    }
+    e.preventDefault();
+  }, {passive:false});
+
+  // ---------------------------------------------------------
+  // Ship drawing (neon mint spaceship)
+  // ---------------------------------------------------------
+  function drawShip(x, y, tiltVX){
+    ctx.save();
+    ctx.translate(x, y);
+    const tilt = Math.max(-0.35, Math.min(0.35, tiltVX * 0.02));
+    ctx.rotate(tilt);
+
+    // engine glow / trail
+    const glowGrad = ctx.createRadialGradient(0, 14, 1, 0, 14, 18);
+    glowGrad.addColorStop(0, 'rgba(166,255,224,0.85)');
+    glowGrad.addColorStop(1, 'rgba(77,255,195,0)');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 16, 9, 16, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // outer glow of ship body
+    ctx.shadowColor = 'rgba(77,255,195,0.9)';
+    ctx.shadowBlur = 18;
+
+    // body
+    ctx.beginPath();
+    ctx.moveTo(0, -18);
+    ctx.lineTo(11, 12);
+    ctx.quadraticCurveTo(0, 6, -11, 12);
+    ctx.closePath();
+    const bodyGrad = ctx.createLinearGradient(0,-18,0,12);
+    bodyGrad.addColorStop(0, '#d9fff2');
+    bodyGrad.addColorStop(0.4, '#4dffc3');
+    bodyGrad.addColorStop(1, '#0e9c72');
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.stroke();
+
+    // cockpit
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.ellipse(0, -4, 3.6, 5, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#0a1622';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(166,255,224,0.9)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // side fins
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(-11,12); ctx.lineTo(-17,20); ctx.lineTo(-7,13); ctx.closePath();
+    ctx.moveTo(11,12); ctx.lineTo(17,20); ctx.lineTo(7,13); ctx.closePath();
+    ctx.fillStyle = '#28e0a8';
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // preview ship in start menu (static svg-ish drawn via canvas snapshot not needed; use simple css shape instead)
+  (function drawPreviewIcon(){
+    const svgNS = "http://www.w3.org/2000/svg";
+    const g = document.getElementById('shipPreviewSvg');
+    const path = document.createElementNS(svgNS,'path');
+    path.setAttribute('d','M30 6 L44 46 Q30 38 16 46 Z');
+    path.setAttribute('fill','url(#grad)');
+    path.setAttribute('stroke','rgba(255,255,255,0.6)');
+    path.setAttribute('stroke-width','1.2');
+    const defs = document.createElementNS(svgNS,'defs');
+    const grad = document.createElementNS(svgNS,'linearGradient');
+    grad.setAttribute('id','grad'); grad.setAttribute('x1','0'); grad.setAttribute('y1','0'); grad.setAttribute('x2','0'); grad.setAttribute('y2','1');
+    const s1=document.createElementNS(svgNS,'stop'); s1.setAttribute('offset','0%'); s1.setAttribute('stop-color','#d9fff2');
+    const s2=document.createElementNS(svgNS,'stop'); s2.setAttribute('offset','50%'); s2.setAttribute('stop-color','#4dffc3');
+    const s3=document.createElementNS(svgNS,'stop'); s3.setAttribute('offset','100%'); s3.setAttribute('stop-color','#0e9c72');
+    grad.appendChild(s1); grad.appendChild(s2); grad.appendChild(s3);
+    defs.appendChild(grad);
+    g.appendChild(defs);
+    g.appendChild(path);
+    g.style.filter = 'drop-shadow(0 0 8px rgba(77,255,195,0.8))';
+  })();
+
+  // ---------------------------------------------------------
+  // Meteor (irregular rocky polygon)
+  // ---------------------------------------------------------
+  function makeMeteor(){
+    const r = Math.random()*22 + 14; // radius 14~36
+    const speed = (Math.random()*90 + 90) * difficultySpeedMul;
+    const points = [];
+    const vertCount = Math.floor(Math.random()*4) + 7; // 7~10 verts
+    for(let i=0;i<vertCount;i++){
+      const ang = (i/vertCount) * Math.PI*2;
+      const rad = r * (0.72 + Math.random()*0.42);
+      points.push({ang, rad});
+    }
+    const isGrey = Math.random() < 0.5;
+    return {
+      x: Math.random()*(W - r*2) + r,
+      y: -r*2 - Math.random()*80,
+      r,
+      speed,
+      rot: Math.random()*Math.PI*2,
+      rotSpeed: (Math.random()-0.5)*1.4,
+      points,
+      colorBase: isGrey ? [130,132,140] : [122,92,66],
+      colorShade: isGrey ? [70,72,80] : [70,52,36]
+    };
+  }
+
+  function drawMeteor(m){
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.rot);
+    ctx.beginPath();
+    m.points.forEach((p, i)=>{
+      const px = Math.cos(p.ang) * p.rad;
+      const py = Math.sin(p.ang) * p.rad;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    });
+    ctx.closePath();
+    const grad = ctx.createRadialGradient(-m.r*0.3,-m.r*0.3,m.r*0.1, 0,0, m.r*1.1);
+    grad.addColorStop(0, `rgb(${m.colorBase[0]+30},${m.colorBase[1]+25},${m.colorBase[2]+20})`);
+    grad.addColorStop(0.6, `rgb(${m.colorBase[0]},${m.colorBase[1]},${m.colorBase[2]})`);
+    grad.addColorStop(1, `rgb(${m.colorShade[0]},${m.colorShade[1]},${m.colorShade[2]})`);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // crater dots
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    for(let i=0;i<3;i++){
+      const cx = (Math.sin(i*12.9 + m.r) ) * m.r*0.35;
+      const cy = (Math.cos(i*7.3 + m.r) ) * m.r*0.35;
+      ctx.beginPath();
+      ctx.arc(cx, cy, m.r*0.12, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------
+  // Star item (score pickup)
+  // ---------------------------------------------------------
+  function makeStarItem(){
+    const r = 12;
+    return {
+      x: Math.random()*(W - r*2) + r,
+      y: -r*2 - Math.random()*60,
+      r,
+      speed: (Math.random()*70 + 80) * difficultySpeedMul,
+      rot: 0,
+      rotSpeed: 2.2,
+      pulse: Math.random()*Math.PI*2
+    };
+  }
+
+  function drawStarItem(s){
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rot);
+    const pulse = 1 + Math.sin(s.pulse)*0.12;
+    ctx.scale(pulse, pulse);
+    ctx.shadowColor = 'rgba(255,210,63,0.95)';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    const spikes = 5, outerR = s.r, innerR = s.r*0.45;
+    for(let i=0;i<spikes*2;i++){
+      const ang = (Math.PI/spikes)*i - Math.PI/2;
+      const rad = i%2===0 ? outerR : innerR;
+      const px = Math.cos(ang)*rad, py = Math.sin(ang)*rad;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0,-outerR,0,outerR);
+    grad.addColorStop(0, '#fff6cf');
+    grad.addColorStop(0.5, '#ffd23f');
+    grad.addColorStop(1, '#e8a800');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------
+  // Particles (explosion + pickup burst)
+  // ---------------------------------------------------------
+  function spawnBurst(x, y, color, count, speedMin, speedMax, life){
+    for(let i=0;i<count;i++){
+      const ang = Math.random()*Math.PI*2;
+      const spd = Math.random()*(speedMax-speedMin)+speedMin;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang)*spd,
+        vy: Math.sin(ang)*spd,
+        life: life,
+        maxLife: life,
+        r: Math.random()*3 + 1.5,
+        color
+      });
+    }
+  }
+
+  function updateParticles(dt){
+    for(let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx*dt;
+      p.y += p.vy*dt;
+      p.vx *= 0.96;
+      p.vy *= 0.96;
+      p.life -= dt;
+      if(p.life<=0) particles.splice(i,1);
+    }
+  }
+
+  function drawParticles(){
+    for(const p of particles){
+      const a = Math.max(0, p.life/p.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r*a, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Screen shake
+  // ---------------------------------------------------------
+  function triggerShake(mag, time){
+    shakeMag = mag;
+    shakeTime = time;
+  }
+
+  // ---------------------------------------------------------
+  // HUD updates
+  // ---------------------------------------------------------
+  const scoreValEl = document.getElementById('scoreVal');
+  const timeValEl = document.getElementById('timeVal');
+  const hudEl = document.getElementById('hud');
+  const startHintEl = document.getElementById('startHint');
+
+  function updateHUD(){
+    scoreValEl.textContent = score;
+    timeValEl.textContent = elapsed.toFixed(1) + 's';
+  }
+
+  // ---------------------------------------------------------
+  // Game flow
+  // ---------------------------------------------------------
+  const startOverlay = document.getElementById('startOverlay');
+  const gameOverOverlay = document.getElementById('gameOverOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  const menuBtn = document.getElementById('menuBtn');
+  const speedSlider = document.getElementById('speedSlider');
+  const speedLabel = document.getElementById('speedLabel');
+  const bestScoreDisplay = document.getElementById('bestScoreDisplay');
+  const bestTimeDisplay = document.getElementById('bestTimeDisplay');
+  const finalScoreEl = document.getElementById('finalScore');
+  const finalTimeEl = document.getElementById('finalTime');
+  const newRecordRow = document.getElementById('newRecordRow');
+
+  function refreshBestDisplay(){
+    bestScoreDisplay.textContent = bestScore;
+    bestTimeDisplay.textContent = bestTime.toFixed(1) + 's';
+  }
+  refreshBestDisplay();
+
+  speedSlider.addEventListener('input', ()=>{
+    sensitivity = parseFloat(speedSlider.value);
+    speedLabel.textContent = sensitivity.toFixed(1) + 'x';
+  });
+
+  function resetGameVars(){
+    score = 0;
+    elapsed = 0;
+    meteors = [];
+    stars = [];
+    particles = [];
+    streaks = [];
+    spawnTimer = 0;
+    spawnInterval = 0.9;
+    starTimer = 0;
+    starInterval = 2.6;
+    difficultySpeedMul = 1;
+    shakeTime = 0;
+    shakeMag = 0;
+    shipX = W/2; shipY = H*0.75;
+    targetX = shipX; targetY = shipY;
+    shipVX = 0; shipVY = 0;
+    lastTs = null;
+  }
+
+  function startGame(){
+    resetGameVars();
+    state = 'playing';
+    startOverlay.classList.add('hidden');
+    gameOverOverlay.classList.add('hidden');
+    hudEl.style.display = 'flex';
+    startHintEl.style.display = 'block';
+    updateHUD();
+    requestAnimationFrame(loop);
+  }
+
+  function endGame(){
+    state = 'gameover';
+    hudEl.style.display = 'none';
+    startHintEl.style.display = 'none';
+
+    let isRecord = false;
+    if(score > bestScore){ bestScore = score; isRecord = true; }
+    if(elapsed > bestTime){ bestTime = elapsed; isRecord = true; }
+    try{
+      localStorage.setItem(STORAGE_KEY_SCORE, String(bestScore));
+      localStorage.setItem(STORAGE_KEY_TIME, String(bestTime));
+    }catch(e){ /* ignore */ }
+
+    finalScoreEl.textContent = score;
+    finalTimeEl.textContent = elapsed.toFixed(1) + 's';
+    newRecordRow.style.display = isRecord ? 'flex' : 'none';
+    refreshBestDisplay();
+
+    setTimeout(()=>{
+      gameOverOverlay.classList.remove('hidden');
+    }, 480);
+  }
+
+  startBtn.addEventListener('click', startGame);
+  retryBtn.addEventListener('click', startGame);
+  menuBtn.addEventListener('click', ()=>{
+    gameOverOverlay.classList.add('hidden');
+    startOverlay.classList.remove('hidden');
+    state = 'menu';
+  });
+
+  // ---------------------------------------------------------
+  // Collision helpers
+  // ---------------------------------------------------------
+  function dist2(x1,y1,x2,y2){
+    const dx=x1-x2, dy=y1-y2;
+    return dx*dx+dy*dy;
+  }
+
+  // ---------------------------------------------------------
+  // Main update
+  // ---------------------------------------------------------
+  function update(dt){
+    // background stars scroll
+    for(const bs of bgStars){
+      bs.y += bs.speed * dt * (state==='playing' ? 1 : 0.3);
+      bs.twinklePhase += bs.twinkleSpeed*dt;
+      if(bs.y > H + 5){ bs.y = -5; bs.x = Math.random()*W; }
+    }
+
+    // streaks
+    maybeSpawnStreak(dt);
+    for(let i=streaks.length-1;i>=0;i--){
+      const s = streaks[i];
+      s.y += s.speed*dt;
+      if(s.y - s.len > H){ streaks.splice(i,1); }
+    }
+
+    if(state !== 'playing'){
+      updateParticles(dt);
+      return;
+    }
+
+    elapsed += dt;
+
+    // difficulty scaling: speed multiplier grows slowly, spawn interval shrinks
+    difficultySpeedMul = 1 + Math.min(elapsed / 45, 1.6); // up to 2.6x over ~45s+
+    spawnInterval = Math.max(0.28, 0.9 - elapsed*0.012);
+    starInterval = Math.max(1.6, 2.6 - elapsed*0.008);
+
+    // ship movement toward target with easing, scaled by sensitivity
+    const followStrength = Math.min(1, dt * 10 * sensitivity);
+    const prevX = shipX, prevY = shipY;
+    shipX += (targetX - shipX) * followStrength;
+    shipY += (targetY - shipY) * followStrength;
+    shipX = Math.max(SHIP_RADIUS, Math.min(W - SHIP_RADIUS, shipX));
+    shipY = Math.max(SHIP_RADIUS, Math.min(H - SHIP_RADIUS, shipY));
+    shipVX = (shipX - prevX)/Math.max(dt,0.0001);
+    shipVY = (shipY - prevY)/Math.max(dt,0.0001);
+
+    // engine trail particles
+    if(Math.random() < 0.6){
+      particles.push({
+        x: shipX + (Math.random()-0.5)*6,
+        y: shipY + 14,
+        vx: (Math.random()-0.5)*20,
+        vy: Math.random()*40+30,
+        life: 0.4, maxLife:0.4,
+        r: Math.random()*2+1,
+        color: 'rgba(166,255,224,0.9)'
+      });
+    }
+
+    // spawn meteors
+    spawnTimer += dt;
+    if(spawnTimer >= spawnInterval){
+      spawnTimer = 0;
+      meteors.push(makeMeteor());
+    }
+
+    // spawn stars
+    starTimer += dt;
+    if(starTimer >= starInterval){
+      starTimer = 0;
+      stars.push(makeStarItem());
+    }
+
+    // update meteors
+    for(let i=meteors.length-1;i>=0;i--){
+      const m = meteors[i];
+      m.y += m.speed*dt;
+      m.rot += m.rotSpeed*dt;
+      if(m.y - m.r*1.4 > H){ meteors.splice(i,1); continue; }
+
+      // collision with ship
+      const minDist = m.r*0.85 + SHIP_RADIUS*0.75;
+      if(dist2(m.x,m.y, shipX,shipY) < minDist*minDist){
+        // collision!
+        spawnBurst(shipX, shipY, 'rgba(255,140,80,0.9)', 26, 60, 260, 0.7);
+        spawnBurst(shipX, shipY, 'rgba(77,255,195,0.9)', 14, 40, 180, 0.6);
+        triggerShake(14, 0.5);
+        meteors.splice(i,1);
+        endGame();
+        return;
+      }
+    }
+
+    // update star items
+    for(let i=stars.length-1;i>=0;i--){
+      const s = stars[i];
+      s.y += s.speed*dt;
+      s.rot += s.rotSpeed*dt;
+      s.pulse += dt*6;
+      if(s.y - s.r*1.4 > H){ stars.splice(i,1); continue; }
+
+      const minDist = s.r*0.9 + SHIP_RADIUS*0.8;
+      if(dist2(s.x,s.y, shipX,shipY) < minDist*minDist){
+        score += 50;
+        spawnBurst(s.x, s.y, 'rgba(255,210,63,0.95)', 16, 50, 180, 0.5);
+        stars.splice(i,1);
+      }
+    }
+
+    // base score for survival time (small trickle so score isn't purely from stars)
+    score += Math.round(dt * 4);
+
+    updateParticles(dt);
+    updateHUD();
+
+    if(shakeTime > 0){
+      shakeTime -= dt;
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Main draw
+  // ---------------------------------------------------------
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    // shake offset
+    let ox=0, oy=0;
+    if(shakeTime > 0){
+      const t = shakeTime;
+      ox = (Math.random()-0.5)*shakeMag*t*2;
+      oy = (Math.random()-0.5)*shakeMag*t*2;
+    }
+    ctx.save();
+    ctx.translate(ox, oy);
+
+    // deep space bg gradient
+    const bgGrad = ctx.createRadialGradient(W*0.5,H*0.3,10, W*0.5,H*0.6, Math.max(W,H)*0.9);
+    bgGrad.addColorStop(0, '#0a0f1e');
+    bgGrad.addColorStop(1, '#020308');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(-20,-20,W+40,H+40);
+
+    // micro dot stars
+    for(const bs of bgStars){
+      const tw = 0.5 + Math.sin(bs.twinklePhase)*0.5;
+      ctx.globalAlpha = bs.alpha * (0.5+tw*0.5);
+      ctx.fillStyle = '#cfe8ff';
+      ctx.beginPath();
+      ctx.arc(bs.x, bs.y, bs.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // speed streaks
+    for(const s of streaks){
+      ctx.globalAlpha = s.alpha;
+      ctx.strokeStyle = '#a6c8ff';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x, s.y - s.len);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // meteors
+    for(const m of meteors) drawMeteor(m);
+
+    // star items
+    for(const s of stars) drawStarItem(s);
+
+    // particles
+    drawParticles();
+
+    // ship
+    if(state === 'playing'){
+      drawShip(shipX, shipY, shipVX);
+    }
+
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------
+  // Loop
+  // ---------------------------------------------------------
+  function loop(ts){
+    if(lastTs === null) lastTs = ts;
+    let dt = (ts - lastTs)/1000;
+    lastTs = ts;
+    dt = Math.min(dt, 0.05); // clamp for tab-switch spikes
+
+    update(dt);
+    draw();
+
+    if(state === 'playing' || shakeTime > 0 || particles.length>0){
+      requestAnimationFrame(loop);
+    } else {
+      // keep bg animating gently in menu/gameover
+      requestAnimationFrame(idleLoop);
+    }
+  }
+
+  function idleLoop(ts){
+    if(lastTs === null) lastTs = ts;
+    let dt = (ts-lastTs)/1000;
+    lastTs = ts;
+    dt = Math.min(dt, 0.05);
+    update(dt);
+    draw();
+    if(state === 'playing'){
+      requestAnimationFrame(loop);
+    } else {
+      requestAnimationFrame(idleLoop);
+    }
+  }
+
+  // init position for background before any interaction
+  shipX = W/2; shipY = H*0.75;
+  targetX = shipX; targetY = shipY;
+  requestAnimationFrame(idleLoop);
+
+})();
+</script>
+</body>
+</html>
